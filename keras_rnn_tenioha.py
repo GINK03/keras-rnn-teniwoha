@@ -69,9 +69,9 @@ def train():
   datasets = pickle.loads(open('dataset.pkl', 'rb').read())
   sentences = []
   answers   = []
-  to_use = datasets[:50000]
+  to_use = datasets
   random.shuffle(to_use)
-  for dbi, series in enumerate(to_use):
+  for dbi, series in enumerate(to_use[:250000]):
     # 64GByteで最大80万データ・セットくらいまで行ける
     head, ans, tail, pure_text = series 
     head.extend(tail)
@@ -98,22 +98,35 @@ def train():
     model.save(MODEL_NAME)
 
 def pred():
+  print("start to loading term_vec")
+  term_vec = pickle.loads(open('term_vec.pkl', 'rb').read())
+  text = open('./to_eval/4meee.wakati.txt', 'r').read().replace('\n', ' ').split()
+  picking_up = []
+  for i in range(10, len(text) - 10, 1):
+    if text[i] in TENIWOHA:
+      try:
+        head = list(map(lambda x:term_vec[x], text[i-10:i] )) 
+        tail = list(map(lambda x:term_vec[x], text[i+1:i+10] )) 
+      except KeyError as e:
+        continue
+      #print( text[i-10:i], text[i], text[i+1:i+10] )
+      head.extend(tail)
+      #print(len(head), len(tail))
+      x = np.array(head)
+      y = text[i]
+      picking_up.append( (x, y, text[i-10:i+10]) )
   model_type = sorted(glob.glob('./models/snapshot.*.model'))[-1]
-  print("start to loading dataset")
-  datasets = pickle.loads(open('dataset.pkl', 'rb').read())
   print("model type is %s"%model_type)
   model  = load_model(model_type)
   sentences = []
   answers   = []
   texts     = []
-  for dbi, series in enumerate(datasets[0:10]):
-    head, ans, tail, pure_text = series 
-    head.extend(tail)
-    sentences.append(np.array(head))
-    answers.append(ans)
+  for dbi, picked in enumerate(picking_up):
+    x, y,  pure_text = picked
+    sentences.append(x)
+    answers.append(y)
     texts.append(pure_text)
   X = np.zeros((len(sentences), len(sentences[0]), 256), dtype=np.float64)
-  y = np.zeros((len(sentences), len(TENIWOHA_IDX)), dtype=np.int)
   for i, sentence in enumerate(sentences):
     if i%10000 == 0:
       print("building training vector... iter %d"%i)
@@ -124,6 +137,7 @@ def pred():
     print([(i,t) for i,t in enumerate(text)])
     for i,f in sorted([(i,f) for i,f in enumerate(result.tolist())], key=lambda x:x[1]*-1):
       print(TENIWOHA_INV[i], f)
+  sys.exit()
 
 def main():
   if '--preexe' in sys.argv:
